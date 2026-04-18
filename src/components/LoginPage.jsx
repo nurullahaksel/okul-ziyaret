@@ -12,7 +12,7 @@ export default function LoginPage({ onSuccess, onBack }) {
     setLoading(true)
     setError("")
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError("Kullanıcı adı veya şifre hatalı.")
+    if (error) setError("HATA: " + error.message)
     else onSuccess()
     setLoading(false)
   }
@@ -29,13 +29,11 @@ export default function LoginPage({ onSuccess, onBack }) {
         borderRadius: 24, padding: "2.5rem", width: "100%", maxWidth: 400,
         backdropFilter: "blur(20px)"
       }}>
-        {/* Geri */}
         <button onClick={onBack} style={{
           background: "none", border: "none", color: "#64748b", cursor: "pointer",
           fontSize: "0.85rem", marginBottom: "1.5rem", padding: 0, display: "flex", alignItems: "center", gap: 6
         }}>← Ana Sayfa</button>
 
-        {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div style={{
             width: 64, height: 64, borderRadius: "50%",
@@ -48,7 +46,6 @@ export default function LoginPage({ onSuccess, onBack }) {
           <p style={{ color: "#64748b", fontSize: "0.85rem", marginTop: 6 }}>GZY Fen Lisesi Yönetim Paneli</p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: "1rem" }}>
             <label style={{ color: "#94a3b8", fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: 6 }}>
