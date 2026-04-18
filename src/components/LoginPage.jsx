@@ -12,7 +12,7 @@ export default function LoginPage({ onSuccess, onBack }) {
     setLoading(true)
     setError("")
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError("Kullanıcı adı veya şifre hatalı.")
+    if (error) setError("HATA: " + error.message)
     else onSuccess()
     setLoading(false)
   }
