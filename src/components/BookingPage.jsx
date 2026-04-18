@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { supabase } from "../lib/supabase"
+import { sendEmail, ADMIN_EMAIL, emailYeniBaşvuru, emailTalepAlındı } from "../lib/email"
 
 const MONTHS_TR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"]
 const DAYS_TR = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"]
@@ -87,6 +88,16 @@ export default function BookingPage({ onBack }) {
       }
     } else {
       setStep("success")
+      const emailData = {
+        school_name: form.school_name, contact_name: form.contact_name,
+        contact_phone: form.contact_phone, contact_email: form.contact_email,
+        student_count: count, notes: form.notes,
+        date: selectedSlot.date, start_time: selectedSlot.start_time, end_time: selectedSlot.end_time
+      }
+      sendEmail({ to: ADMIN_EMAIL, subject: `[Yeni Başvuru] ${form.school_name}`, html: emailYeniBaşvuru(emailData) })
+      if (form.contact_email) {
+        sendEmail({ to: form.contact_email, subject: 'Ziyaret Talebiniz Alındı – GZY Fen Lisesi', html: emailTalepAlındı(emailData) })
+      }
     }
     setSaving(false)
   }

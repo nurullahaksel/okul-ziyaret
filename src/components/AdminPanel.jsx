@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { supabase } from "../lib/supabase"
+import { sendEmail, emailOnaylandı, emailİptalEdildi } from "../lib/email"
 
 const inp = {
   width: "100%", padding: "10px 14px", borderRadius: 10,
@@ -80,9 +81,14 @@ export default function AdminPanel({ onLogout }) {
     await supabase.from("visit_slots").delete().eq("id", id)
   }
 
-  async function handleUpdateBooking(id, status) {
-    await supabase.from("visit_bookings").update({ status }).eq("id", id)
+  async function handleUpdateBooking(booking, status) {
+    await supabase.from("visit_bookings").update({ status }).eq("id", booking.id)
     fetchBookings()
+    if (booking.contact_email && booking.visit_slots) {
+      const d = { contact_name: booking.contact_name, school_name: booking.school_name, student_count: booking.student_count, date: booking.visit_slots.date, start_time: booking.visit_slots.start_time, end_time: booking.visit_slots.end_time }
+      if (status === "onaylandi") sendEmail({ to: booking.contact_email, subject: 'Ziyaret Talebiniz Onaylandı – GZY Fen Lisesi', html: emailOnaylandı(d) })
+      if (status === "iptal") sendEmail({ to: booking.contact_email, subject: 'Ziyaret Talebiniz Hakkında – GZY Fen Lisesi', html: emailİptalEdildi(d) })
+    }
   }
 
   async function handleDeleteBooking(id) {
@@ -301,14 +307,14 @@ export default function AdminPanel({ onLogout }) {
                               borderRadius: 8, padding: "4px 10px", fontSize: "0.78rem", fontWeight: 700
                             }}>{statusLabel(b.status)}</span>
                             {b.status !== "onaylandi" && (
-                              <button onClick={() => handleUpdateBooking(b.id, "onaylandi")} style={{
+                              <button onClick={() => handleUpdateBooking(b, "onaylandi")} style={{
                                 background: "rgba(16,185,129,0.2)", border: "none", color: "#6ee7b7",
                                 borderRadius: 6, padding: "4px 10px", cursor: "pointer",
                                 fontSize: "0.78rem", fontFamily: "'Nunito', sans-serif"
                               }}>Onayla</button>
                             )}
                             {b.status !== "iptal" && (
-                              <button onClick={() => handleUpdateBooking(b.id, "iptal")} style={{
+                              <button onClick={() => handleUpdateBooking(b, "iptal")} style={{
                                 background: "rgba(239,68,68,0.15)", border: "none", color: "#fca5a5",
                                 borderRadius: 6, padding: "4px 10px", cursor: "pointer",
                                 fontSize: "0.78rem", fontFamily: "'Nunito', sans-serif"
@@ -365,14 +371,14 @@ export default function AdminPanel({ onLogout }) {
                       fontSize: "0.8rem", fontWeight: 700
                     }}>{statusLabel(b.status)}</span>
                     {b.status !== "onaylandi" && (
-                      <button onClick={() => handleUpdateBooking(b.id, "onaylandi")} style={{
+                      <button onClick={() => handleUpdateBooking(b, "onaylandi")} style={{
                         background: "rgba(16,185,129,0.2)", border: "none", color: "#6ee7b7",
                         borderRadius: 6, padding: "5px 12px", cursor: "pointer",
                         fontSize: "0.8rem", fontFamily: "'Nunito', sans-serif"
                       }}>Onayla</button>
                     )}
                     {b.status !== "iptal" && (
-                      <button onClick={() => handleUpdateBooking(b.id, "iptal")} style={{
+                      <button onClick={() => handleUpdateBooking(b, "iptal")} style={{
                         background: "rgba(239,68,68,0.15)", border: "none", color: "#fca5a5",
                         borderRadius: 6, padding: "5px 12px", cursor: "pointer",
                         fontSize: "0.8rem", fontFamily: "'Nunito', sans-serif"
