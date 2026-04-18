@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { supabase } from "../lib/supabase"
+import { sendEmail, ADMIN_EMAIL, emailYeniBaşvuru, emailTalepAlındı } from "../lib/email"
 
 const MONTHS_TR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"]
 const DAYS_TR = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"]
@@ -21,7 +22,7 @@ export default function BookingPage({ onBack }) {
   const [slots, setSlots] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedSlot, setSelectedSlot] = useState(null)
-  const [step, setStep] = useState("list") // list | form | success
+  const [step, setStep] = useState("list")
   const [form, setForm] = useState({
     school_name: "", contact_name: "", contact_phone: "", contact_email: "", student_count: "", notes: ""
   })
@@ -30,7 +31,6 @@ export default function BookingPage({ onBack }) {
 
   useEffect(() => {
     fetchSlots()
-    // Realtime güncellemeler
     const ch = supabase.channel("booking-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "visit_slots" }, fetchSlots)
       .subscribe()
@@ -43,7 +43,6 @@ export default function BookingPage({ onBack }) {
       .select("*")
       .order("date")
       .order("start_time")
-    // Sadece gelecekteki slotları göster
     const today = new Date().toISOString().split("T")[0]
     setSlots((data || []).filter(s => s.date >= today))
     setLoading(false)
@@ -79,9 +78,20 @@ export default function BookingPage({ onBack }) {
     }])
 
     if (err) {
+      console.error("Booking error:", err)
       setError("Başvuru sırasında bir hata oluştu. Lütfen tekrar deneyin.")
     } else {
       setStep("success")
+      const emailData = {
+        school_name: form.school_name, contact_name: form.contact_name,
+        contact_phone: form.contact_phone, contact_email: form.contact_email,
+        student_count: count, notes: form.notes,
+        date: selectedSlot.date, start_time: selectedSlot.start_time, end_time: selectedSlot.end_time
+      }
+      sendEmail({ to: ADMIN_EMAIL, subject: `[Yeni Başvuru] ${form.school_name}`, html: emailYeniBaşvuru(emailData) })
+      if (form.contact_email) {
+        sendEmail({ to: form.contact_email, subject: 'Ziyaret Talebiniz Alındı – GZY Fen Lisesi', html: emailTalepAlındı(emailData) })
+      }
     }
     setSaving(false)
   }
@@ -95,8 +105,6 @@ export default function BookingPage({ onBack }) {
       fontFamily: "'Nunito', sans-serif", color: "#e2e8f0", padding: "2rem 1rem"
     }}>
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
-
-        {/* Header */}
         <div style={{ marginBottom: "2rem" }}>
           <button onClick={onBack} style={{
             background: "none", border: "none", color: "#64748b",
@@ -117,7 +125,6 @@ export default function BookingPage({ onBack }) {
           </div>
         </div>
 
-        {/* ——— SLOT LİSTESİ ——— */}
         {step === "list" && (
           <div>
             <div style={{
@@ -126,7 +133,6 @@ export default function BookingPage({ onBack }) {
             }}>
               💡 Uygun olan tarihi seçin ve randevunuzu oluşturun. Birden fazla okul aynı güne kayıt yapabilir.
             </div>
-
             {loading ? (
               <div style={{ textAlign: "center", color: "#64748b", padding: "3rem" }}>Yükleniyor...</div>
             ) : slots.length === 0 ? (
@@ -143,7 +149,6 @@ export default function BookingPage({ onBack }) {
               const rem = slot.max_capacity - slot.current_count
               const full = rem <= 0
               const pct = Math.min(100, Math.round((slot.current_count / slot.max_capacity) * 100))
-
               return (
                 <div key={slot.id} style={{
                   background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)",
@@ -160,17 +165,12 @@ export default function BookingPage({ onBack }) {
                         🕐 {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
                         {slot.notes && <span style={{ marginLeft: 12, color: "#64748b" }}>· {slot.notes}</span>}
                       </div>
-
-                      {/* Kapasite bar */}
                       <div style={{ marginTop: "0.75rem" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
                           <span style={{ color: "#94a3b8", fontSize: "0.78rem" }}>
                             {slot.current_count} / {slot.max_capacity} öğrenci kayıtlı
                           </span>
-                          <span style={{
-                            fontSize: "0.78rem", fontWeight: 700,
-                            color: full ? "#ef4444" : rem < 20 ? "#f59e0b" : "#10b981"
-                          }}>
+                          <span style={{ fontSize: "0.78rem", fontWeight: 700, color: full ? "#ef4444" : rem < 20 ? "#f59e0b" : "#10b981" }}>
                             {full ? "⛔ Dolu" : `${rem} yer kaldı`}
                           </span>
                         </div>
@@ -182,20 +182,13 @@ export default function BookingPage({ onBack }) {
                         </div>
                       </div>
                     </div>
-
-                    <button
-                      onClick={() => !full && handleSelectSlot(slot)}
-                      disabled={full}
-                      style={{
-                        background: full ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #0ea5e9, #0284c7)",
-                        border: "none", color: full ? "#475569" : "#fff",
-                        borderRadius: 10, padding: "10px 20px", cursor: full ? "not-allowed" : "pointer",
-                        fontWeight: 700, fontSize: "0.9rem", fontFamily: "'Nunito', sans-serif",
-                        whiteSpace: "nowrap", alignSelf: "flex-start"
-                      }}
-                    >
-                      {full ? "Dolu" : "Randevu Al →"}
-                    </button>
+                    <button onClick={() => !full && handleSelectSlot(slot)} disabled={full} style={{
+                      background: full ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #0ea5e9, #0284c7)",
+                      border: "none", color: full ? "#475569" : "#fff",
+                      borderRadius: 10, padding: "10px 20px", cursor: full ? "not-allowed" : "pointer",
+                      fontWeight: 700, fontSize: "0.9rem", fontFamily: "'Nunito', sans-serif",
+                      whiteSpace: "nowrap", alignSelf: "flex-start"
+                    }}>{full ? "Dolu" : "Randevu Al →"}</button>
                   </div>
                 </div>
               )
@@ -203,10 +196,8 @@ export default function BookingPage({ onBack }) {
           </div>
         )}
 
-        {/* ——— FORM ——— */}
         {step === "form" && selectedSlot && (
           <div>
-            {/* Seçilen slot özeti */}
             <div style={{
               background: "rgba(14,165,233,0.1)", border: "1px solid rgba(14,165,233,0.25)",
               borderRadius: 12, padding: "1rem 1.2rem", marginBottom: "1.5rem"
@@ -218,68 +209,44 @@ export default function BookingPage({ onBack }) {
                 <span style={{ fontWeight: 700 }}>Kalan yer: {remaining}</span>
               </div>
             </div>
-
             <form onSubmit={handleSubmit}>
-              <h3 style={{ margin: "0 0 1.2rem", fontWeight: 800, color: "#94a3b8", fontSize: "0.95rem", letterSpacing: 1, textTransform: "uppercase" }}>
-                Okul Bilgileri
-              </h3>
-
+              <h3 style={{ margin: "0 0 1.2rem", fontWeight: 800, color: "#94a3b8", fontSize: "0.95rem", letterSpacing: 1, textTransform: "uppercase" }}>Okul Bilgileri</h3>
               <div style={{ display: "grid", gap: "1rem", marginBottom: "1rem" }}>
                 <div>
-                  <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>
-                    Okul Adı *
-                  </label>
-                  <input type="text" style={inp()} required
-                    placeholder="Örn: Samsun Atatürk Anadolu Lisesi"
+                  <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>Okul Adı *</label>
+                  <input type="text" style={inp()} required placeholder="Örn: Samsun Atatürk Anadolu Lisesi"
                     value={form.school_name} onChange={e => setForm({ ...form, school_name: e.target.value })} />
                 </div>
-
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                   <div>
-                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>
-                      İlgili Öğretmen / Kişi *
-                    </label>
-                    <input type="text" style={inp()} required
-                      placeholder="Ad Soyad"
+                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>İlgili Öğretmen / Kişi *</label>
+                    <input type="text" style={inp()} required placeholder="Ad Soyad"
                       value={form.contact_name} onChange={e => setForm({ ...form, contact_name: e.target.value })} />
                   </div>
                   <div>
-                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>
-                      Telefon Numarası *
-                    </label>
-                    <input type="tel" style={inp()} required
-                      placeholder="05XX XXX XX XX"
+                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>Telefon Numarası *</label>
+                    <input type="tel" style={inp()} required placeholder="05XX XXX XX XX"
                       value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })} />
                   </div>
                 </div>
-
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                   <div>
-                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>
-                      E-posta (opsiyonel)
-                    </label>
+                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>E-posta (opsiyonel)</label>
                     <input type="email" style={inp()} placeholder="okul@meb.gov.tr"
                       value={form.contact_email} onChange={e => setForm({ ...form, contact_email: e.target.value })} />
                   </div>
                   <div>
-                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>
-                      Öğrenci Sayısı * <span style={{ color: "#f59e0b" }}>(max: {remaining})</span>
-                    </label>
-                    <input type="number" style={inp()} required min={1} max={remaining}
-                      placeholder={`1 – ${remaining}`}
+                    <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>Öğrenci Sayısı * <span style={{ color: "#f59e0b" }}>(max: {remaining})</span></label>
+                    <input type="number" style={inp()} required min={1} max={remaining} placeholder={`1 – ${remaining}`}
                       value={form.student_count} onChange={e => setForm({ ...form, student_count: e.target.value })} />
                   </div>
                 </div>
-
                 <div>
-                  <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>
-                    Ekstra Not (opsiyonel)
-                  </label>
+                  <label style={{ color: "#94a3b8", fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: 5 }}>Ekstra Not (opsiyonel)</label>
                   <input type="text" style={inp()} placeholder="Özel istek veya bilgi..."
                     value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
                 </div>
               </div>
-
               {error && (
                 <div style={{
                   background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)",
@@ -287,7 +254,6 @@ export default function BookingPage({ onBack }) {
                   fontSize: "0.85rem", marginBottom: "1rem"
                 }}>{error}</div>
               )}
-
               <div style={{ display: "flex", gap: 10 }}>
                 <button type="button" onClick={() => setStep("list")} style={{
                   background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
@@ -306,7 +272,6 @@ export default function BookingPage({ onBack }) {
           </div>
         )}
 
-        {/* ——— BAŞARI ——— */}
         {step === "success" && (
           <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
             <div style={{
@@ -316,9 +281,7 @@ export default function BookingPage({ onBack }) {
               fontSize: 40, margin: "0 auto 1.5rem",
               boxShadow: "0 0 50px rgba(16,185,129,0.4)"
             }}>✅</div>
-            <h2 style={{ color: "#fff", fontWeight: 900, fontSize: "1.6rem", marginBottom: "0.5rem" }}>
-              Talebiniz Alındı!
-            </h2>
+            <h2 style={{ color: "#fff", fontWeight: 900, fontSize: "1.6rem", marginBottom: "0.5rem" }}>Talebiniz Alındı!</h2>
             <p style={{ color: "#94a3b8", fontSize: "0.95rem", maxWidth: 380, margin: "0 auto 2rem", lineHeight: 1.6 }}>
               Ziyaret talebiniz GZY Fen Lisesi rehber öğretmenine iletildi.<br />
               En kısa sürede sizinle iletişime geçilecektir.
@@ -330,12 +293,8 @@ export default function BookingPage({ onBack }) {
               }}>
                 <div style={{ color: "#6ee7b7", fontWeight: 700, marginBottom: 4 }}>Randevu Bilgisi</div>
                 <div style={{ color: "#f1f5f9" }}>{formatDate(selectedSlot.date)}</div>
-                <div style={{ color: "#94a3b8", fontSize: "0.88rem" }}>
-                  {formatTime(selectedSlot.start_time)} – {formatTime(selectedSlot.end_time)}
-                </div>
-                <div style={{ color: "#94a3b8", fontSize: "0.88rem", marginTop: 4 }}>
-                  Okul: {form.school_name} · {form.student_count} öğrenci
-                </div>
+                <div style={{ color: "#94a3b8", fontSize: "0.88rem" }}>{formatTime(selectedSlot.start_time)} – {formatTime(selectedSlot.end_time)}</div>
+                <div style={{ color: "#94a3b8", fontSize: "0.88rem", marginTop: 4 }}>Okul: {form.school_name} · {form.student_count} öğrenci</div>
               </div>
             )}
             <button onClick={onBack} style={{
