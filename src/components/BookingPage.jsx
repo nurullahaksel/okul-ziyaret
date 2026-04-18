@@ -79,7 +79,12 @@ export default function BookingPage({ onBack }) {
     }])
 
     if (err) {
-      setError("Başvuru sırasında bir hata oluştu. Lütfen tekrar deneyin.")
+      console.error("Booking error:", err)
+      if (err.code === "42501") {
+        setError("Sunucu yapılandırma hatası. Lütfen yöneticiyle iletişime geçin.")
+      } else {
+        setError("Başvuru sırasında bir hata oluştu. Lütfen tekrar deneyin.")
+      }
     } else {
       setStep("success")
     }

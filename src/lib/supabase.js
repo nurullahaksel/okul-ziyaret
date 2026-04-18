@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 
-// .env dosyasından veya direkt buraya yaz
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'YOUR_SUPABASE_URL'
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY'
 
@@ -8,11 +7,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 /*
 ======================================================
-SUPABASE'DE ÇALIŞTIRILACAK SQL (Table Editor > SQL)
+SUPABASE SQL EDITOR'A YAPISTIR VE RUN ET
+(Eğer tablolar zaten varsa önce DROP edip tekrar çalıştır)
 ======================================================
 
--- Ziyaret slotları (admin tarafından oluşturulan)
-CREATE TABLE visit_slots (
+-- Ziyaret slotları
+CREATE TABLE IF NOT EXISTS visit_slots (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   date DATE NOT NULL,
   start_time TIME NOT NULL,
@@ -23,8 +23,8 @@ CREATE TABLE visit_slots (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Ziyaret başvuruları (diğer okullardan)
-CREATE TABLE visit_bookings (
+-- Ziyaret başvuruları
+CREATE TABLE IF NOT EXISTS visit_bookings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   slot_id UUID REFERENCES visit_slots(id) ON DELETE CASCADE,
   school_name TEXT NOT NULL,
@@ -33,31 +33,27 @@ CREATE TABLE visit_bookings (
   contact_email TEXT,
   student_count INT NOT NULL,
   notes TEXT,
-  status TEXT DEFAULT 'beklemede', -- beklemede | onaylandi | iptal
+  status TEXT DEFAULT 'beklemede',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS politikaları (Row Level Security)
+-- RLS etkinleştir
 ALTER TABLE visit_slots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE visit_bookings ENABLE ROW LEVEL SECURITY;
 
--- Slotları herkes görebilir
+-- Slotlar herkese açık (okuma)
 CREATE POLICY "Slotlar herkese acik" ON visit_slots FOR SELECT USING (true);
-
--- Slotları sadece admin (authenticated) oluşturabilir/silebilir
 CREATE POLICY "Admin slot ekleyebilir" ON visit_slots FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "Admin slot silebilir" ON visit_slots FOR DELETE USING (auth.role() = 'authenticated');
 CREATE POLICY "Admin slot guncelleyebilir" ON visit_slots FOR UPDATE USING (auth.role() = 'authenticated');
 
--- Başvuruları herkes yapabilir
+-- Başvurular
 CREATE POLICY "Herkes basvurabilir" ON visit_bookings FOR INSERT WITH CHECK (true);
-
--- Başvuruları sadece admin görebilir
 CREATE POLICY "Admin basvurulari gorebilir" ON visit_bookings FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Admin basvuru guncelleyebilir" ON visit_bookings FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "Admin basvuru silebilir" ON visit_bookings FOR DELETE USING (auth.role() = 'authenticated');
 
--- Slot sayacını güncelleyen fonksiyon
+-- Slot sayacı trigger (SECURITY DEFINER = RLS'i bypass eder, anonim kullanıcılar için gerekli)
 CREATE OR REPLACE FUNCTION update_slot_count()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -68,14 +64,28 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS booking_count_trigger ON visit_bookings;
 CREATE TRIGGER booking_count_trigger
 AFTER INSERT OR DELETE ON visit_bookings
 FOR EACH ROW EXECUTE FUNCTION update_slot_count();
 
--- Realtime için tabloları etkinleştir
+-- Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE visit_slots;
 ALTER PUBLICATION supabase_realtime ADD TABLE visit_bookings;
+
+======================================================
+ADMİN ŞİFRESİ SIFIRLAMA (Giriş yapılamıyorsa bu SQL'i çalıştır)
+Supabase → Authentication → Users → kullanıcıyı sil → yeniden oluştur (Dashboard üzerinden).
+Ya da aşağıdaki SQL ile sıfırla (extensions şeması gerekiyor):
+
+UPDATE auth.users
+SET encrypted_password = extensions.crypt('YENİ_ŞİFRE', extensions.gen_salt('bf')),
+    updated_at = NOW()
+WHERE email = 'EMAIL_ADRESİ';
+
+Eğer extensions.crypt çalışmazsa Supabase Dashboard'dan kullanıcıyı silip
+Authentication > Users > Add user ile yeniden oluştur — bu en güvenilir yol.
 ======================================================
 */
